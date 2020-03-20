@@ -61,6 +61,28 @@ let methodIteration (f:float -> float)
     printfn "№\tx\tf x\tx^\tphi x\t|x-x^|"
     methodIterationHelper f phi 1 x e
 
+let drawGraph (f:float -> float)
+        (xMin:float) (xMax:float)
+        (yMin:float) (yMax:float)
+        (xScale:float) (yScale:float)
+        (xStep:float) =
+    let out = new IO.FileStream("graph.svg", IO.FileMode.Create)
+    let encoding = System.Text.UTF8Encoding()
+    let addText (str:string) =
+        let bytes = encoding.GetBytes(str)
+        out.Write(bytes, 0, bytes.Length)
+    addText <| sprintf """<svg xmlns="http://www.w3.org/2000/svg"
+    stroke="black" viewBox="%f %f %f %f" text-anchor="end" r="3">"""
+        (xMin * xScale) (yMin * yScale) (xMax * xScale) (yMax * yScale)
+    addText <| sprintf """<line x1="%f" y1="0" x2="%f" y2="0"/>""" (xMin * xScale) (xMax * xScale)
+    addText <| sprintf """<line x1="0" y1="%f" x2="0" y2="%f"/>""" (yMin * yScale) (yMax * yScale)
+    addText """<text x="-2" y="14">0</text>"""
+    for x in 1 .. int xMax do
+        addText <| sprintf """<text x="%f" y="14">%d</text>""" (float x * xScale - 2.0) x
+        addText <| sprintf """<circle cx="%f" cy="0"/>""" (float x * xScale)
+    addText "</svg>"
+    out.Close()
+
 [<EntryPoint>]
 let main argv =
     Console.OutputEncoding <- Text.Encoding.UTF8
@@ -73,6 +95,7 @@ let main argv =
     let f x = polynomial ks x
     let f' x = polynomial (derivative ks) x
     let phi x = -Math.Pow ((polynomial (List.take (ks.Length - 1) ks) x), (1.0 / float (ks.Length - 1))) / List.last ks
+    drawGraph f -2.0 3.0 -5.0 15.0 100.0 25.0 0.1
     // f' = 0 при x = -0.9325403926 и x = 1.28531817
     // f'' = 0 при x = 0.1763888889
     let chordValidMin = 1.28531817
