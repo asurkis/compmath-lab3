@@ -1,10 +1,14 @@
 ﻿open System
+open System.Globalization
 
 let readLines = Seq.initInfinite (fun _ -> Console.ReadLine())
 let read parser = 
     readLines
     |> Seq.choose (parser >> function true, v -> Some v | _ -> None)
-let readFloats = read Double.TryParse
+let readFloats = read (fun s -> 
+    Double.TryParse(s.Replace(',', '.'),
+                    NumberStyles.Any, 
+                    CultureInfo.InvariantCulture))
 
 let rec polynomial (ks:float list) (x:float) =
     match ks with
@@ -19,12 +23,11 @@ let rec methodChordHelper (f:float -> float)
         (n:int) (a:float) (b:float) (e:float) =
     let fa = f a
     let fb = f b
-    // let x = (a * fb - b * fa) / (fb - fa)
-    let x = 0.5 * (a + b)
+    let x = (a * fb - b * fa) / (fb - fa)
     let fx = f x
     let d = Math.Abs (a - b)
-    printfn "%d\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f" n a b x fa fb d
-    if d < e then x else
+    printfn "%d\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f" n a b x fa fb fx d
+    if d < e || Math.Abs fx < e then x else
         methodChordHelper f (n + 1) x (if fa * fx < 0.0 then a else b) e
 
 let rec methodNewtonHelper (f:float -> float)
@@ -46,42 +49,20 @@ let rec methodIterationHelper (f:float -> float)
 let methodChord (f:float -> float)
         (a:float) (b:float) (e:float) =
     printfn "Метод хорд"
-    printfn "№\ta\tb\tx\tf a\tf b\t|a-b|"
+    printfn "№\ta\tb\tx\tf(a)\tf(b)\tf(x)\t|a-b|"
     methodChordHelper f 1 a b e
 
 let methodNewton (f:float -> float)
         (f':float -> float) (x:float) (e:float) =
     printfn "Метод Ньютона"
-    printfn "№\tx\tf x\tf' x\tx^\t|x-x^|"
+    printfn "№\tx\tf(x)\tf'(x)\tx^\t|x-x^|"
     methodNewtonHelper f f' 1 x e
 
 let methodIteration (f:float -> float)
         (phi:float -> float) (x:float) (e:float) = 
     printfn "Метод простой итерации"
-    printfn "№\tx\tf x\tx^\tphi x\t|x-x^|"
+    printfn "№\tx\tf(x)\tx^\tphi(x)\t|x-x^|"
     methodIterationHelper f phi 1 x e
-
-let drawGraph (f:float -> float)
-        (xMin:float) (xMax:float)
-        (yMin:float) (yMax:float)
-        (xScale:float) (yScale:float)
-        (xStep:float) =
-    let out = new IO.FileStream("graph.svg", IO.FileMode.Create)
-    let encoding = System.Text.UTF8Encoding()
-    let addText (str:string) =
-        let bytes = encoding.GetBytes(str)
-        out.Write(bytes, 0, bytes.Length)
-    addText <| sprintf """<svg xmlns="http://www.w3.org/2000/svg"
-    stroke="black" viewBox="%f %f %f %f" text-anchor="end" r="3">"""
-        (xMin * xScale) (yMin * yScale) (xMax * xScale) (yMax * yScale)
-    addText <| sprintf """<line x1="%f" y1="0" x2="%f" y2="0"/>""" (xMin * xScale) (xMax * xScale)
-    addText <| sprintf """<line x1="0" y1="%f" x2="0" y2="%f"/>""" (yMin * yScale) (yMax * yScale)
-    addText """<text x="-2" y="14">0</text>"""
-    for x in 1 .. int xMax do
-        addText <| sprintf """<text x="%f" y="14">%d</text>""" (float x * xScale - 2.0) x
-        addText <| sprintf """<circle cx="%f" cy="0"/>""" (float x * xScale)
-    addText "</svg>"
-    out.Close()
 
 [<EntryPoint>]
 let main argv =
@@ -90,30 +71,54 @@ let main argv =
     // f' = -7.2 x^2 + 2.54 x + 8.63
     // f'' = -14.4 x + 2.54
     // f''' = -14.4
+    // phi = ((1.27 x^2 + 8.63 x + 2.31) / 2.4)^(1/3)
+    // phi' = ((1.27 x^2 + 8.63 x + 2.31) / 2.4)^(-2/3)
+    //        * (2.54 x + 8.63) / 7.2
+    // Условие достаточной сходимости метода простой итерации к 
+    // центральному корню не выполняется, т.к. в окрестности корня 
+    // x ~= -0.286252 производная phi' по модулю превосходит 1:
+    // phi'(-0.286252) = 13.3959
 
     let ks = [2.31; 8.63; 1.27; -2.4]
     let f x = polynomial ks x
     let f' x = polynomial (derivative ks) x
-    let phi x = -Math.Pow ((polynomial (List.take (ks.Length - 1) ks) x), (1.0 / float (ks.Length - 1))) / List.last ks
-    drawGraph f -2.0 3.0 -5.0 15.0 100.0 25.0 0.1
+    let phi x =
+        let p = ks.Length - 1
+        let bas = polynomial (List.take p ks) x / List.last ks
+        -float (Math.Sign bas) * Math.Pow (Math.Abs bas, 1.0 / float p)
     // f' = 0 при x = -0.9325403926 и x = 1.28531817
     // f'' = 0 при x = 0.1763888889
     let chordValidMin = 1.28531817
     let newtonValidMax = -0.9325403926
 
-    printfn "Введите первую границу для метода хорд (больше %f)" chordValidMin
+    printf "Введите первую границу для метода хорд"
+    printf " (больше %f): " chordValidMin
     let a = Seq.filter (fun x -> x >= chordValidMin) readFloats |> Seq.head
-    printfn "Введите вторую границу для метода хорд (больше %f, f(a) * f(b) < 0)" chordValidMin
-    let b = Seq.filter (fun x -> x >= chordValidMin && f(x) * f(a) < 0.0) readFloats |> Seq.head
-    printfn "Введите начальное приближение для метода Ньютона (меньше %f)" newtonValidMax
-    let xNewton = Seq.filter (fun x -> x <= newtonValidMax) readFloats |> Seq.head
-    printfn "Введите начальное приближение для метода простой итерации (от  до )"
+    printfn "%f" a
+    printf "Введите вторую границу для метода хорд "
+    printf "(больше %f, f(a) * f(b) < 0): " chordValidMin
+    let b = Seq.filter (fun x -> x >= chordValidMin && f(x) * f(a) < 0.0) 
+             readFloats |> Seq.head
+    printfn "%f" b
+    printf "Введите начальное приближение для метода Ньютона "
+    printf "(меньше %f): " newtonValidMax
+    let xNewton = Seq.filter (fun x -> x <= newtonValidMax) 
+                   readFloats |> Seq.head
+    printfn "%f" xNewton
+    printf "Введите начальное приближение для метода простой итерации: "
     let xIter = readFloats |> Seq.head
-    printfn "Введите погрешность (больше 0.01)"
+    printfn "%f" xIter
+    printf "Введите погрешность (больше 0.01): "
     let epsilon = Seq.filter (fun x -> x >= 0.01) readFloats |> Seq.head
+    printfn "%f" epsilon
 
-    printfn "%f %f %f %f %f" a b xNewton xIter epsilon
-    printfn "Правый корень: %.3f" (methodChord f a b epsilon)
-    printfn "Левый корень: %.3f" (methodNewton f f' xNewton epsilon)
-    printfn "Центральный корень: %.3f" (methodIteration f phi xIter epsilon)
+    let rightRoot = methodChord f a b epsilon
+    printf "Правый корень: "
+    printfn "%.3f; f(%.3f) = %.3f" rightRoot rightRoot (f rightRoot)
+    let leftRoot = methodNewton f f' xNewton epsilon
+    printf "Левый корень: "
+    printfn "%.3f; f(%.3f) = %.3f" leftRoot leftRoot (f leftRoot)
+    let middleRoot = methodIteration f phi xIter epsilon
+    printf "Корень метода простой итерации: "
+    printfn "%.3f; f(%.3f) = %.3f" middleRoot middleRoot (f middleRoot)
     0
