@@ -64,6 +64,89 @@ let methodIteration (f:float -> float)
     printfn "№\tx\tf(x)\tx^\tphi(x)\t|x-x^|"
     methodIterationHelper f phi 1 x e
 
+let drawGraphSvg (fs:(float -> float) list) (xMin:float) (xMax:float) 
+        (yMin:float) (yMax:float) (scaleX:float) (scaleY:float) (samples:int) =
+    let stream = IO.File.CreateText("pic.svg")
+    sprintf """<svg xmlns="http://www.w3.org/2000/svg" 
+            version="1.1" width="%f" height="%f"
+            stroke="black" text-anchor="end">"""
+        ((xMax - xMin) * scaleX)
+        ((yMax - yMin) * scaleY)
+        |> stream.WriteLine
+    sprintf """<line x1="%f" y1="%f" x2="%f" y2="%f"/>"""
+        0.0 (yMax * scaleY) ((xMax - xMin) * scaleX - 10.0) (yMax * scaleY)
+        |> stream.WriteLine
+    sprintf """<line x1="%f" y1="%f" x2="%f" y2="%f"/>"""
+        (-xMin * scaleX) 10.0 (-xMin * scaleX) ((yMax - yMin) * scaleY)
+        |> stream.WriteLine
+    sprintf """<text x="%f" y="%f">0</text>"""
+        (-xMin * scaleX - 2.0) (yMax * scaleY + 14.0)
+        |> stream.WriteLine
+    sprintf """<path d="M %f %f L %f %f L %f %f Z" />"""
+        ((xMax - xMin) * scaleX) (yMax * scaleY)
+        ((xMax - xMin) * scaleX - 10.0) (yMax * scaleY + 5.0)
+        ((xMax - xMin) * scaleX - 10.0) (yMax * scaleY - 5.0)
+        |> stream.WriteLine
+    sprintf """<text x="%f" y="%f">x</text>"""
+        ((xMax - xMin) * scaleX) (yMax * scaleY + 20.0)
+        |> stream.WriteLine
+    sprintf """<path d="M %f %f L %f %f L %f %f Z" />"""
+        (-xMin * scaleX) 0.0
+        (-xMin * scaleX - 5.0) 10.0
+        (-xMin * scaleX + 5.0) 10.0
+        |> stream.WriteLine
+    sprintf """<text x="%f" y="%f">y</text>"""
+        (-xMin * scaleX - 10.0) 15.0
+        |> stream.WriteLine
+    sprintf """<circle cx="%f" cy="%f" r="2"/>""" 
+        (-xMin * scaleX) (yMax * scaleY)
+        |> stream.WriteLine
+    for i in 1..int xMax do
+        let cx = (float i - xMin) * scaleX
+        let cy = yMax * scaleY
+        sprintf """<circle cx="%f" cy="%f" r="2"/>""" cx cy
+            |> stream.WriteLine
+        sprintf """<text x="%f" y="%f" text-anchor="end">%d</text>"""
+            (cx - 2.0) (cy + 14.0) i
+            |> stream.WriteLine
+    for i in 1..int -xMin do
+        let cx = (-float i - xMin) * scaleX
+        let cy = yMax * scaleY
+        sprintf """<circle cx="%f" cy="%f" r="2"/>""" cx cy
+            |> stream.WriteLine
+        sprintf """<text x="%f" y="%f" text-anchor="end">-%d</text>"""
+            (cx - 2.0) (cy + 14.0) i
+            |> stream.WriteLine
+    for i in 1..int yMax do
+        let cx = -xMin * scaleX
+        let cy = (yMax - float i) * scaleY
+        sprintf """<circle cx="%f" cy="%f" r="2"/>""" cx cy
+            |> stream.WriteLine
+        sprintf """<text x="%f" y="%f" text-anchor="end">%d</text>"""
+            (cx - 2.0) (cy + 14.0) i
+            |> stream.WriteLine
+    for i in 1..int -yMin do
+        let cx = -xMin * scaleX
+        let cy = (yMax + float i) * scaleY
+        sprintf """<circle cx="%f" cy="%f" r="2"/>""" cx cy
+            |> stream.WriteLine
+        sprintf """<text x="%f" y="%f" text-anchor="end">-%d</text>"""
+            (cx - 2.0) (cy + 14.0) i
+            |> stream.WriteLine
+
+    for f in fs do
+        sprintf """<path fill="transparent" d="M %f %f"""
+            0.0 ((yMax - f xMin) * scaleY)
+            |> stream.WriteLine
+        for i in 1..samples do
+            let x = xMin + (xMax - xMin) * float i / float samples
+            sprintf "L %f %f" 
+                ((x - xMin) * scaleX) ((yMax - f x) * scaleY)
+                |> stream.WriteLine
+        stream.WriteLine "\"/>"
+    stream.WriteLine "</svg>"
+    stream.Close()
+
 [<EntryPoint>]
 let main argv =
     Console.OutputEncoding <- Text.Encoding.UTF8
@@ -90,6 +173,8 @@ let main argv =
     // f'' = 0 при x = 0.1763888889
     let chordValidMin = 1.28531817
     let newtonValidMax = -0.9325403926
+
+    drawGraphSvg [f] -2.5 2.5 -3.5 11.5 100.0 50.0 1000
 
     printf "Введите первую границу для метода хорд"
     printf " (больше %f): " chordValidMin
